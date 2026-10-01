@@ -1,3 +1,4 @@
+import os
 import pickle
 import numpy as np                          
 from nltk.tokenize import word_tokenize
@@ -69,6 +70,18 @@ class LSTM_Model:
 
     def load_assets(self) -> None:
         if self.model is None:
+            # Check for config file to auto-sync architecture parameters if available
+            config_path = os.path.join(os.path.dirname(self.model_path), "config.pkl")
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "rb") as f:
+                        cfg = pickle.load(f)
+                        self.max_len = cfg.get("max_len", self.max_len)
+                        self.embed_dim = cfg.get("embed_dim", self.embed_dim)
+                        self.hidden_dim = cfg.get("hidden_dim", self.hidden_dim)
+                except Exception:
+                    pass
+
             # Load vocabulary dictionary
             with open(self.vocab_path, "rb") as f:
                 self.vocab = pickle.load(f)

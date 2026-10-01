@@ -1,5 +1,6 @@
 import os
 import sys
+import pickle
 from pathlib import Path
 import streamlit as st
 from PIL import Image
@@ -56,13 +57,27 @@ def load_text_classifier(model_name: str) -> LSTM_Model:
         missing_str = ", ".join([f"`{f.name}`" for f in missing_files])
         raise FileNotFoundError(f"Missing required model assets in `{saved_models_dir}`: {missing_str}")
 
+    config_path = saved_models_dir / "config.pkl"
+    max_len = 40
+    embed_dim = 300
+    hidden_dim = 128
+    if config_path.exists():
+        try:
+            with open(config_path, "rb") as f:
+                cfg = pickle.load(f)
+                max_len = cfg.get("max_len", max_len)
+                embed_dim = cfg.get("embed_dim", 300)
+                hidden_dim = cfg.get("hidden_dim", hidden_dim)
+        except Exception:
+            pass
+
     classifier = LSTM_Model(
         model_path=str(model_path),
         vocab_path=str(vocab_path),
         label_encoder_path=str(label_encoder_path),
-        max_len=40,
-        embed_dim=100,
-        hidden_dim=128,
+        max_len=max_len,
+        embed_dim=embed_dim,
+        hidden_dim=hidden_dim,
     )
     classifier.load_assets()
     return classifier
