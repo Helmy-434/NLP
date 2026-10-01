@@ -17,22 +17,21 @@ from models.LSTM import BiLSTMClassifier
 nltk.download("punkt", quiet=True)
 nltk.download("punkt_tab", quiet=True)
 
-
-DATASET_PATH = "cellula toxic data (1).csv"
-TEXT_COL = "text"
-LABEL_COL = "label"
+# Configuration
+DATASET_PATH = "cellula toxic data  (1).csv"
+TEXT_COLS = ["query", "image descriptions"]
+LABEL_COL = "Toxic Category"
 SEED = 42
 MAX_LEN_PERCENTILE = 95  
-EMBED_DIM = 100
+EMBED_DIM = 300
 HIDDEN_DIM = 128
 BATCH_SIZE = 32
-EPOCHS = 5
+EPOCHS = 20
 LR = 0.001
 MIN_FREQ = 2
 
 SAVE_DIR = "models/saved_models"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 
 def set_seed(seed: int = 42):
@@ -44,12 +43,9 @@ def set_seed(seed: int = 42):
     torch.backends.cudnn.benchmark = False
 
 
-
 def calculate_dynamic_max_len(texts, percentile: int = 95) -> int:
-    """Tokenizes all texts and calculates sequence length at the specified percentile."""
     lengths = [len(word_tokenize(str(text).lower())) for text in texts]
     calculated_max_len = int(np.percentile(lengths, percentile))
-    # Ensure at least a minimal sequence length of 1
     return max(calculated_max_len, 1)
 
 
@@ -66,7 +62,6 @@ def build_vocab(texts, min_freq=2):
     return vocab
 
 
-# --- 4. DATASET & DYNAMIC COLLATOR ---
 class TextDataset(Dataset):
     def __init__(self, texts, labels, vocab, max_len):
         self.texts = list(texts)
@@ -80,7 +75,6 @@ class TextDataset(Dataset):
 
     def __getitem__(self, idx):
         text = str(self.texts[idx]).lower()
-        # Truncate sequence to 95th percentile length
         tokens = word_tokenize(text)[: self.max_len]
         
         ids = [self.vocab.get(t, self.unk_idx) for t in tokens]
@@ -91,7 +85,6 @@ class TextDataset(Dataset):
 
 
 def dynamic_collate_fn(batch, pad_idx=0):
-    """Pads sequences dynamically per batch up to the longest sentence in that batch."""
     sequences, labels = zip(*batch)
     lengths = torch.tensor([len(seq) for seq in sequences], dtype=torch.long)
     padded_sequences = pad_sequence(sequences, batch_first=True, padding_value=pad_idx)
@@ -99,20 +92,24 @@ def dynamic_collate_fn(batch, pad_idx=0):
     return padded_sequences, lengths, labels
 
 
-# --- 5. MAIN TRAINING ROUTINE ---
 def train():
-    # Enforce constant reproducibility
     set_seed(SEED)
     print(f"Using device: {DEVICE} | Global Seed: {SEED}")
 
     if not os.path.exists(DATASET_PATH):
         raise FileNotFoundError(f"Dataset file '{DATASET_PATH}' not found!")
 
-    df = pd.read_csv(DATASET_PATH).dropna(subset=[TEXT_COL, LABEL_COL])
+    df = pd.read_csv(DATASET_PATH).dropna(subset=TEXT_COLS + [LABEL_COL]).reset_index(drop=True)
+
+    # Cleanly combine text columns into a single string series
+    combined_texts = (
+        df["query"].fillna("").astype(str) + " " + df["image descriptions"].fillna("").astype(str)
+    ).str.strip().values
+
     print(f"Dataset loaded: {len(df)} samples.")
 
-    # Calculate MAX_LEN dynamically using 95th percentile
-    max_len = calculate_dynamic_max_len(df[TEXT_COL].values, percentile=MAX_LEN_PERCENTILE)
+    # Calculate MAX_LEN dynamically
+    max_len = calculate_dynamic_max_len(combined_texts, percentile=MAX_LEN_PERCENTILE)
     print(f"Calculated MAX_LEN ({MAX_LEN_PERCENTILE}th percentile): {max_len} tokens")
 
     # Encode Labels
@@ -120,14 +117,14 @@ def train():
     encoded_labels = label_encoder.fit_transform(df[LABEL_COL])
     num_classes = len(label_encoder.classes_)
 
-    # Build Vocabulary
-    vocab = build_vocab(df[TEXT_COL], min_freq=MIN_FREQ)
+    # Build Vocabulary on combined text
+    vocab = build_vocab(combined_texts, min_freq=MIN_FREQ)
     pad_idx = vocab["<pad>"]
     print(f"Vocabulary size: {len(vocab)} words.")
 
-    # Stratified Train/Val Split with constant seed
+    # Stratified Train/Val Split
     X_train, X_val, y_train, y_val = train_test_split(
-        df[TEXT_COL].values,
+        combined_texts,
         encoded_labels,
         test_size=0.2,
         random_state=SEED,
@@ -150,7 +147,7 @@ def train():
         collate_fn=lambda b: dynamic_collate_fn(b, pad_idx),
     )
 
-    # Initialize Network
+    # Initialize Model
     model = BiLSTMClassifier(
         vocab_size=len(vocab),
         embed_dim=EMBED_DIM,
@@ -191,15 +188,24 @@ def train():
         val_acc = correct / total if total > 0 else 0.0
         print(f"Epoch [{epoch}/{EPOCHS}] - Loss: {total_loss/len(train_loader):.4f} | Val Acc: {val_acc:.2%}")
 
-    # Export Artifacts
+    # Export Artifacts & Config
     os.makedirs(SAVE_DIR, exist_ok=True)
     torch.save(model.state_dict(), os.path.join(SAVE_DIR, "bilstm.pt"))
+    
     with open(os.path.join(SAVE_DIR, "vocab.pkl"), "wb") as f:
         pickle.dump(vocab, f)
     with open(os.path.join(SAVE_DIR, "label_encoder.pkl"), "wb") as f:
         pickle.dump(label_encoder, f)
+        
+    config = {
+        "max_len": max_len,
+        "embed_dim": EMBED_DIM,
+        "hidden_dim": HIDDEN_DIM,
+    }
+    with open(os.path.join(SAVE_DIR, "config.pkl"), "wb") as f:
+        pickle.dump(config, f)
 
-    print("\nTraining Complete! All artifacts exported successfully.")
+    print("\nTraining Complete! All artifacts saved.")
 
 
 if __name__ == "__main__":
