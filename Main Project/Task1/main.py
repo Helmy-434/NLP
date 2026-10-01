@@ -41,21 +41,21 @@ def load_captioner() -> ImageCaptioner:
     captioner.load_model()
     return captioner
 
-
 @st.cache_resource(show_spinner=False)
 def load_text_classifier(model_name: str) -> LSTM_Model:
-    """
-    Loads and caches the selected text classification model.
-    Configured to load saved artifacts from models/saved_models.
-    """
     saved_models_dir = BASE_DIR / "models" / "saved_models"
     
-    # Path mappings for saved models
-    model_path = saved_models_dir / "bilstm.pt"
+    model_filename = f"{model_name.lower()}.pt"
+    model_path = saved_models_dir / model_filename
     vocab_path = saved_models_dir / "vocab.pkl"
     label_encoder_path = saved_models_dir / "label_encoder.pkl"
 
-    # Default dimension settings matching train.py
+    # Validate before instantiating or caching
+    missing_files = [p for p in [model_path, vocab_path, label_encoder_path] if not p.exists()]
+    if missing_files:
+        missing_str = ", ".join([f"`{f.name}`" for f in missing_files])
+        raise FileNotFoundError(f"Missing required model assets in `{saved_models_dir}`: {missing_str}")
+
     classifier = LSTM_Model(
         model_path=str(model_path),
         vocab_path=str(vocab_path),
@@ -64,10 +64,7 @@ def load_text_classifier(model_name: str) -> LSTM_Model:
         embed_dim=100,
         hidden_dim=128,
     )
-    
-    # Check if weights exist before attempting to load
-    if model_path.exists() and vocab_path.exists() and label_encoder_path.exists():
-        classifier.load_assets()
+    classifier.load_assets()
     return classifier
 
 
@@ -198,7 +195,8 @@ def main():
                             classifier = load_text_classifier(selected_model_name)
                             
                             # Check if model has weights loaded
-                            saved_model_file = BASE_DIR / "models" / "saved_models" / "bilstm.pt"
+                            model_filename = f"{selected_model_name.lower()}.pt"
+                            saved_model_file = BASE_DIR / "models" / "saved_models" / model_filename
                             if not saved_model_file.exists():
                                 st.error(
                                     f"⚠️ Model weights not found at `{saved_model_file}`. "
