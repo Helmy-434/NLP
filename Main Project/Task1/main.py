@@ -99,8 +99,10 @@ def prepare_nltk_resources() -> bool:
         try:
             nltk.data.find(resource_path)
         except LookupError:
-            if not nltk.download(resource, quiet=True):
-                raise RuntimeError(f"Unable to download NLTK resource: {resource}")
+            raise RuntimeError(
+                f"Missing NLTK resource '{resource}'. "
+                "Ensure it is listed in the root nltk.txt file and redeploy the app."
+            )
 
     return True
 
