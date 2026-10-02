@@ -18,7 +18,8 @@ nltk.download("punkt", quiet=True)
 nltk.download("punkt_tab", quiet=True)
 
 # Configuration
-DATASET_PATH = "cellula toxic data  (1).csv"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_PATH = os.path.join(BASE_DIR, "DB", "cellula toxic data  (1).csv")
 TEXT_COLS = ["query", "image descriptions"]
 LABEL_COL = "Toxic Category"
 SEED = 42
@@ -30,7 +31,7 @@ EPOCHS = 20
 LR = 0.001
 MIN_FREQ = 2
 
-SAVE_DIR = "models/saved_models"
+SAVE_DIR = os.path.join(BASE_DIR, "models", "saved_models")
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 

@@ -1,10 +1,11 @@
-import os
 import sys
 import pickle
 from pathlib import Path
 import streamlit as st
 from PIL import Image
 import pandas as pd
+import nltk
+
 
 # Add the project root to sys.path so imports work seamlessly
 BASE_DIR = Path(__file__).resolve().parent
@@ -14,6 +15,10 @@ if str(BASE_DIR) not in sys.path:
 from database import Database
 from imagecaption import ImageCaptioner
 from models.LSTM import LSTM_Model
+
+
+MODEL_DIR = BASE_DIR / "models" / "saved_models"
+MODEL_FILES = {"BiLSTM": MODEL_DIR / "bilstm.pt"}
 
 # ---------------------------------------------------------
 # Page Configuration
@@ -44,10 +49,11 @@ def load_captioner() -> ImageCaptioner:
 
 @st.cache_resource(show_spinner=False)
 def load_text_classifier(model_name: str) -> LSTM_Model:
-    saved_models_dir = BASE_DIR / "models" / "saved_models"
-    
-    model_filename = f"{model_name.lower()}.pt"
     model_path = saved_models_dir / model_filename
+    model_path = MODEL_FILES.get(model_name)
+    if model_path is None:
+        raise ValueError(f"Unsupported model: {model_name}")
+
     vocab_path = saved_models_dir / "vocab.pkl"
     label_encoder_path = saved_models_dir / "label_encoder.pkl"
 
@@ -82,6 +88,23 @@ def load_text_classifier(model_name: str) -> LSTM_Model:
     classifier.load_assets()
     return classifier
 
+@st.cache_resource
+def prepare_nltk_resources() -> bool:
+    resources = {
+        "punkt": "tokenizers/punkt",
+        "punkt_tab": "tokenizers/punkt_tab",
+    }
+
+    for resource, resource_path in resources.items():
+        try:
+            nltk.data.find(resource_path)
+        except LookupError:
+            if not nltk.download(resource, quiet=True):
+                raise RuntimeError(f"Unable to download NLTK resource: {resource}")
+
+    return True
+
+
 
 # ---------------------------------------------------------
 # Helper Functions
@@ -101,13 +124,17 @@ def determine_input_type(has_text: bool, has_image: bool) -> str:
 # ---------------------------------------------------------
 def main():
     db = get_database()
-
+    prepare_nltk_resources()
     # --- Sidebar Configuration ---
     st.sidebar.title("⚙️ Settings")
     st.sidebar.markdown("Configure your inference parameters below.")
 
     # Model Dropdown Selection
-    model_options = ["BiLSTM", "LSTM", "RNN"]
+    model_options = [name for name, path in MODEL_FILES.items() if path.exists()]
+    if not model_options:
+        st.error(f"No trained model files were found in `{MODEL_DIR}`.")
+        st.stop()
+
     selected_model_name = st.sidebar.selectbox(
         "Choose Classification Model:",
         options=model_options,
@@ -210,8 +237,7 @@ def main():
                             classifier = load_text_classifier(selected_model_name)
                             
                             # Check if model has weights loaded
-                            model_filename = f"{selected_model_name.lower()}.pt"
-                            saved_model_file = BASE_DIR / "models" / "saved_models" / model_filename
+                            saved_model_file = MODEL_FILES[selected_model_name]
                             if not saved_model_file.exists():
                                 st.error(
                                     f"⚠️ Model weights not found at `{saved_model_file}`. "
