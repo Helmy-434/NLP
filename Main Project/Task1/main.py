@@ -49,7 +49,7 @@ def load_captioner() -> ImageCaptioner:
 
 @st.cache_resource(show_spinner=False)
 def load_text_classifier(model_name: str) -> LSTM_Model:
-    model_path = saved_models_dir / model_filename
+    saved_models_dir = MODEL_DIR
     model_path = MODEL_FILES.get(model_name)
     if model_path is None:
         raise ValueError(f"Unsupported model: {model_name}")
