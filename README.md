@@ -1,4 +1,4 @@
-# Text Toxicity Classification ( RNN vs Bi-LSTM )
+# Text Toxicity Classification 
 
 A robust end-to-end deep learning pipeline built in PyTorch to classify toxic content from multi-column text inputs (user queries and image descriptions). The architecture utilizes a Bidirectional LSTM (BiLSTM) with dual global pooling (Average + Max Pooling) and class-weighted optimization to handle severely imbalanced categories.
 
