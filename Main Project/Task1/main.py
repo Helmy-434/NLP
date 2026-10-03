@@ -94,15 +94,33 @@ def prepare_nltk_resources() -> bool:
         "punkt": "tokenizers/punkt",
         "punkt_tab": "tokenizers/punkt_tab",
     }
+    nltk_data_dir = Path.home() / "nltk_data"
+    nltk_data_dir.mkdir(parents=True, exist_ok=True)
+    if str(nltk_data_dir) not in nltk.data.path:
+        nltk.data.path.insert(0, str(nltk_data_dir))
 
     for resource, resource_path in resources.items():
         try:
             nltk.data.find(resource_path)
         except LookupError:
-            raise RuntimeError(
-                f"Missing NLTK resource '{resource}'. "
-                "Ensure it is listed in the root nltk.txt file and redeploy the app."
+            downloaded = nltk.download(
+                resource,
+                download_dir=str(nltk_data_dir),
+                quiet=True,
             )
+
+            if not downloaded:
+                raise RuntimeError(
+                    f"NLTK resource '{resource}' is missing and could not be downloaded."
+                )
+
+            try:
+                nltk.data.find(resource_path)
+            except LookupError as exc:
+                raise RuntimeError(
+                    f"NLTK resource '{resource}' was downloaded but cannot be found "
+                    f"in '{nltk_data_dir}'."
+                ) from exc
 
     return True
 
